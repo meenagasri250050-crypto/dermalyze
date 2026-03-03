@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ShieldAlert, CheckCircle2, AlertTriangle, Loader2, RefreshCcw, Info, Droplets, FlaskConical, Beaker, LayoutGrid, Scan, ChevronRight, Palette, User } from 'lucide-react';
+import { Sparkles, ShieldAlert, CheckCircle2, AlertTriangle, Loader2, RefreshCcw, Info, Droplets, FlaskConical, Beaker, LayoutGrid, Scan, ChevronRight, Palette, User, Leaf, Clock, Zap, MessageSquare } from 'lucide-react';
 import { ImageUpload } from './components/ImageUpload';
-import { analyzeDermatology, scanShelf, analyzeBeauty } from './services/geminiService';
-import { AnalysisResult, Rating, ShelfScanResult, BeautyAnalysisResult } from './types';
+import { ChatBot } from './components/ChatBot';
+import { analyzeDermatology, scanShelf, analyzeBeauty, analyzeNaturalRemedy } from './services/geminiService';
+import { AnalysisResult, Rating, ShelfScanResult, BeautyAnalysisResult, NaturalRemedyResult } from './types';
+import { Languages, Globe } from 'lucide-react';
 
-type Tab = 'single' | 'shelf' | 'beauty';
+type Tab = 'single' | 'shelf' | 'beauty' | 'natural' | 'chat';
+
+const LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'hi', name: 'हिन्दी', flag: '🇮🇳' },
+  { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'ja', name: '日本語', flag: '🇯🇵' },
+  { code: 'ko', name: '한국어', flag: '🇰🇷' },
+];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const [selectedLanguage, setSelectedLanguage] = useState(LANGUAGES[0]);
+  const [isLangOpen, setIsLangOpen] = useState(false);
   
   // Single Analysis State
   const [skinImage, setSkinImage] = useState<string | null>(null);
@@ -28,6 +43,11 @@ export default function App() {
   const [isBeautyScanning, setIsBeautyScanning] = useState(false);
   const [beautyResult, setBeautyResult] = useState<BeautyAnalysisResult | null>(null);
   
+  // Natural Remedy State
+  const [naturalImage, setNaturalImage] = useState<string | null>(null);
+  const [isNaturalAnalyzing, setIsNaturalAnalyzing] = useState(false);
+  const [naturalResult, setNaturalResult] = useState<NaturalRemedyResult | null>(null);
+  
   const [error, setError] = useState<string | null>(null);
 
   const handleAnalyze = async (sImg?: string, pImg?: string) => {
@@ -38,7 +58,7 @@ export default function App() {
     setIsAnalyzing(true);
     setError(null);
     try {
-      const data = await analyzeDermatology(skin, product);
+      const data = await analyzeDermatology(skin, product, selectedLanguage.name);
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -56,7 +76,7 @@ export default function App() {
     setIsScanning(true);
     setError(null);
     try {
-      const data = await scanShelf(shelf, skin);
+      const data = await scanShelf(shelf, skin, selectedLanguage.name);
       setShelfResult(data);
     } catch (err) {
       console.error(err);
@@ -74,13 +94,30 @@ export default function App() {
     setIsBeautyScanning(true);
     setError(null);
     try {
-      const data = await analyzeBeauty(shelf, skin);
+      const data = await analyzeBeauty(shelf, skin, selectedLanguage.name);
       setBeautyResult(data);
     } catch (err) {
       console.error(err);
       setError('Beauty scan failed. Please try again with clearer images.');
     } finally {
       setIsBeautyScanning(false);
+    }
+  };
+
+  const handleNaturalAnalyze = async (img?: string) => {
+    const skin = img || naturalImage;
+    if (!skin) return;
+
+    setIsNaturalAnalyzing(true);
+    setError(null);
+    try {
+      const data = await analyzeNaturalRemedy(skin, selectedLanguage.name);
+      setNaturalResult(data);
+    } catch (err) {
+      console.error(err);
+      setError('Natural remedy analysis failed. Please try again with a clearer image.');
+    } finally {
+      setIsNaturalAnalyzing(false);
     }
   };
 
@@ -94,6 +131,8 @@ export default function App() {
     setBeautySkinImage(null);
     setBeautyShelfImage(null);
     setBeautyResult(null);
+    setNaturalImage(null);
+    setNaturalResult(null);
     setError(null);
   };
 
@@ -129,6 +168,46 @@ export default function App() {
           </div>
           <span className="text-xl font-bold tracking-tight font-sans">Dermalyze</span>
         </motion.div>
+
+        {/* Language Selector */}
+        <div className="relative mb-8">
+          <button
+            onClick={() => setIsLangOpen(!isLangOpen)}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded-full text-sm font-medium transition-all"
+          >
+            <Globe className="w-4 h-4 text-zinc-500" />
+            <span>{selectedLanguage.flag} {selectedLanguage.name}</span>
+          </button>
+          
+          <AnimatePresence>
+            {isLangOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-zinc-100 rounded-2xl shadow-xl p-2 z-50 grid grid-cols-2 gap-1 min-w-[240px]"
+              >
+                {LANGUAGES.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => {
+                      setSelectedLanguage(lang);
+                      setIsLangOpen(false);
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+                      selectedLanguage.code === lang.code 
+                        ? 'bg-zinc-900 text-white' 
+                        : 'hover:bg-zinc-50 text-zinc-600'
+                    }`}
+                  >
+                    <span>{lang.flag}</span>
+                    <span>{lang.name}</span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         <motion.h1
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -160,6 +239,20 @@ export default function App() {
           >
             <Scan className="w-4 h-4" />
             Single Analysis
+          </button>
+          <button
+            onClick={() => { setActiveTab('natural'); reset(); }}
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'natural' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+          >
+            <Leaf className="w-4 h-4" />
+            Natural Remedy
+          </button>
+          <button
+            onClick={() => { setActiveTab('chat'); reset(); }}
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'chat' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Expert Chat
           </button>
         </div>
       </header>
@@ -491,7 +584,7 @@ export default function App() {
               </div>
             )}
           </>
-        ) : (
+        ) : activeTab === 'beauty' ? (
           <>
             {!beautyResult ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -621,6 +714,157 @@ export default function App() {
               </div>
             )}
           </>
+        ) : activeTab === 'natural' ? (
+          <>
+            {!naturalResult ? (
+              <div className="max-w-2xl mx-auto">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <ImageUpload
+                    id="natural-upload"
+                    label="Skin Concern Photo"
+                    description="Upload a photo of your skin concern (acne, dullness, etc.)"
+                    image={naturalImage}
+                    onImageSelect={(img) => {
+                      setNaturalImage(img);
+                      if (img) handleNaturalAnalyze(img);
+                    }}
+                    facingMode="user"
+                  />
+                </motion.div>
+
+                <div className="flex flex-col items-center gap-4 mt-8">
+                  <button
+                    onClick={() => handleNaturalAnalyze()}
+                    disabled={!naturalImage || isNaturalAnalyzing}
+                    className={`px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center gap-2
+                      ${!naturalImage || isNaturalAnalyzing
+                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-xl active:scale-95'
+                      }`}
+                  >
+                    {isNaturalAnalyzing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Analyzing Concerns...
+                      </>
+                    ) : (
+                      <>
+                        <Leaf className="w-5 h-5" />
+                        Get Natural Remedy
+                      </>
+                    )}
+                  </button>
+                  {error && (
+                    <p className="text-rose-500 text-sm font-medium">{error}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-3xl mx-auto space-y-8">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-serif italic">Natural Remedy Analysis</h2>
+                  <button
+                    onClick={reset}
+                    className="p-3 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors"
+                  >
+                    <RefreshCcw className="w-5 h-5 text-zinc-600" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="md:col-span-1 space-y-6"
+                  >
+                    <div className="glass p-6 rounded-3xl card-shadow border-emerald-100 bg-emerald-50/30">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-4 flex items-center gap-2">
+                        <Scan className="w-3 h-3" />
+                        Visual Diagnosis
+                      </h3>
+                      <p className="text-sm text-zinc-700 leading-relaxed italic">
+                        "{naturalResult.diagnosis}"
+                      </p>
+                    </div>
+
+                    <div className="glass p-6 rounded-3xl card-shadow">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
+                        <Clock className="w-3 h-3" />
+                        Details
+                      </h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-zinc-500">Prep Time</span>
+                          <span className="text-xs font-bold text-zinc-900">{naturalResult.prep_time}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-zinc-500">Difficulty</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${naturalResult.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {naturalResult.difficulty}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="md:col-span-2 glass p-8 rounded-3xl card-shadow relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 p-8 opacity-5">
+                        <Leaf className="w-32 h-32 text-emerald-900" />
+                    </div>
+                    
+                    <h3 className="text-2xl font-serif italic text-zinc-900 mb-6">{naturalResult.remedy_name}</h3>
+                    
+                    <div className="space-y-6 relative z-10">
+                      <div>
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Ingredients</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {naturalResult.ingredients.map((ing, i) => (
+                            <span key={i} className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full">
+                              {ing}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Preparation Steps</h4>
+                        <ol className="space-y-3">
+                          {naturalResult.steps.map((step, i) => (
+                            <li key={i} className="flex gap-3 text-sm text-zinc-600">
+                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
+                                {i + 1}
+                              </span>
+                              {step}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+
+                      <div className="pt-6 border-t border-zinc-100">
+                        <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                          <Zap className="w-4 h-4 text-amber-500 mt-0.5" />
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1">Pro Tip</p>
+                            <p className="text-xs text-amber-800 leading-relaxed">{naturalResult.pro_tip}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <ChatBot language={selectedLanguage.name} />
         )}
       </main>
 

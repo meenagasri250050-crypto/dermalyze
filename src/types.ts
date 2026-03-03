@@ -57,3 +57,13 @@ export interface BeautyAnalysisResult {
   detectedUndertone: 'Warm' | 'Cool' | 'Neutral';
   shelf_analysis: BeautyProduct[];
 }
+
+export interface NaturalRemedyResult {
+  diagnosis: string;
+  remedy_name: string;
+  prep_time: string;
+  difficulty: 'Easy' | 'Medium';
+  ingredients: string[];
+  steps: string[];
+  pro_tip: string;
+}

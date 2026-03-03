@@ -1,6 +1,6 @@
 {
   "name": "Dermalyze",
-  "description": "Master Beauty Consultant & Dermatological VLM. Expert skincare analysis, full collection scanning, and advanced shade matching for foundations, lipsticks, nail polish, blush, concealer, and primers.",
+  "description": "Master Beauty Consultant & Dermatological VLM. Expert skincare analysis, natural remedy recipes, AI Chatbot for skincare advice, full collection scanning, and advanced shade matching.",
   "requestFramePermissions": [
     "camera"
   ]
