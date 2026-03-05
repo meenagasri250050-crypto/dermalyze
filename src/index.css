@@ -9,7 +9,14 @@
 
 @layer base {
   body {
-    @apply bg-[#FDFCFB] text-zinc-900 antialiased;
+    @apply text-zinc-900 antialiased transition-colors duration-700 ease-in-out;
+    font-size: 14px;
+  }
+  
+  @screen md {
+    body {
+      font-size: 16px;
+    }
   }
 }
 

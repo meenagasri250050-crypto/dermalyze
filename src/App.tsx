@@ -1,29 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ShieldAlert, CheckCircle2, AlertTriangle, Loader2, RefreshCcw, Info, Droplets, FlaskConical, Beaker, LayoutGrid, Scan, ChevronRight, Palette, User, Leaf, Clock, Zap, MessageSquare } from 'lucide-react';
+import { Sparkles, ShieldAlert, CheckCircle2, AlertTriangle, Loader2, RefreshCcw, Info, Droplets, FlaskConical, Beaker, LayoutGrid, Scan, ChevronRight, Palette, User, Leaf, Clock, Zap, MessageSquare, X } from 'lucide-react';
 import { ImageUpload } from './components/ImageUpload';
 import { ChatBot } from './components/ChatBot';
 import { analyzeDermatology, scanShelf, analyzeBeauty, analyzeNaturalRemedy } from './services/geminiService';
 import { AnalysisResult, Rating, ShelfScanResult, BeautyAnalysisResult, NaturalRemedyResult } from './types';
-import { Languages, Globe } from 'lucide-react';
 
 type Tab = 'single' | 'shelf' | 'beauty' | 'natural' | 'chat';
 
-const LANGUAGES = [
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'hi', name: 'हिन्दी', flag: '🇮🇳' },
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
-  { code: 'ja', name: '日本語', flag: '🇯🇵' },
-  { code: 'ko', name: '한국어', flag: '🇰🇷' },
-];
-
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('shelf');
-  const [selectedLanguage, setSelectedLanguage] = useState(LANGUAGES[0]);
-  const [isLangOpen, setIsLangOpen] = useState(false);
   
   // Single Analysis State
   const [skinImage, setSkinImage] = useState<string | null>(null);
@@ -48,7 +34,656 @@ export default function App() {
   const [isNaturalAnalyzing, setIsNaturalAnalyzing] = useState(false);
   const [naturalResult, setNaturalResult] = useState<NaturalRemedyResult | null>(null);
   
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
+  const [overlayTab, setOverlayTab] = useState<Tab | null>(null);
+  
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isOverlayOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOverlayOpen]);
+
+  const handleTabClick = (tab: Tab) => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    if (isMobile) {
+      setOverlayTab(tab);
+      setIsOverlayOpen(true);
+    } else {
+      setActiveTab(tab);
+      reset();
+    }
+  };
+
+  const renderTabContent = (tab: Tab) => {
+    if (tab === 'single') {
+      return (
+        <>
+          {!result ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <ImageUpload
+                  id="skin-upload"
+                  label="Step 1: Your Skin"
+                  description="Upload a clear photo of the skin area"
+                  image={skinImage}
+                  onImageSelect={(img) => {
+                    setSkinImage(img);
+                    if (img && productImage) handleAnalyze(img, productImage);
+                  }}
+                  facingMode="user"
+                />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <ImageUpload
+                  id="product-upload"
+                  label="Step 2: The Product"
+                  description="Upload the product bottle or shelf"
+                  image={productImage}
+                  onImageSelect={(img) => {
+                    setProductImage(img);
+                    if (img && skinImage) handleAnalyze(skinImage, img);
+                  }}
+                  facingMode="environment"
+                />
+              </motion.div>
+
+              <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4 w-full">
+                <button
+                  onClick={() => handleAnalyze()}
+                  disabled={!skinImage || !productImage || isAnalyzing}
+                  className={`w-full md:w-auto px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2
+                    ${!skinImage || !productImage || isAnalyzing
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
+                    }`}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      Analyze Safety
+                    </>
+                  )}
+                </button>
+                {error && (
+                  <p className="text-rose-500 text-sm font-medium">{error}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Results Header */}
+              <div className={`p-6 rounded-3xl border flex flex-col md:flex-row items-center gap-6 ${getRatingColor(result.comparison.rating)}`}>
+                <div className="p-4 bg-white rounded-2xl shadow-sm">
+                  {getRatingIcon(result.comparison.rating)}
+                </div>
+                <div className="flex-1 text-center md:text-left">
+                  <h2 className="text-2xl font-bold mb-1">
+                    {result.comparison.rating === Rating.GREEN && "Highly Recommended"}
+                    {result.comparison.rating === Rating.YELLOW && "Safe but Ineffective"}
+                    {result.comparison.rating === Rating.RED && "Avoid this Product"}
+                  </h2>
+                  <p className="opacity-90 leading-relaxed">{result.comparison.reasoning}</p>
+                </div>
+                <button
+                  onClick={reset}
+                  className="p-4 bg-white/50 hover:bg-white/80 rounded-full transition-colors shadow-sm"
+                >
+                  <RefreshCcw className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Skin Analysis */}
+                <motion.section
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="glass p-8 rounded-3xl card-shadow"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-zinc-100 rounded-lg">
+                      <Droplets className="w-5 h-5 text-zinc-600" />
+                    </div>
+                    <h3 className="font-bold text-lg">Skin Profile</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Body Part</label>
+                      <p className="text-zinc-900 font-medium">{result.skinAnalysis.bodyPart}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Condition</label>
+                      <p className="text-zinc-900 font-medium">{result.skinAnalysis.condition}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Skin Type</label>
+                      <p className="text-zinc-900 font-medium">{result.skinAnalysis.type}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Primary Needs</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {result.skinAnalysis.needs.map((need, i) => (
+                          <span key={i} className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full">
+                            {need}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.section>
+
+                {/* Product Analysis */}
+                <motion.section
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="glass p-8 rounded-3xl card-shadow"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-zinc-100 rounded-lg">
+                      <FlaskConical className="w-5 h-5 text-zinc-600" />
+                    </div>
+                    <h3 className="font-bold text-lg">Product Details</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Product Name</label>
+                      <p className="text-zinc-900 font-medium">{result.productAnalysis.name}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Brand</label>
+                      <p className="text-zinc-900 font-medium">{result.productAnalysis.brand}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Ingredients</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {result.productAnalysis.ingredients.slice(0, 8).map((ing, i) => (
+                          <span key={i} className="px-2 py-1 bg-zinc-50 border border-zinc-100 text-zinc-500 text-[10px] rounded-md">
+                            {ing}
+                          </span>
+                        ))}
+                        {result.productAnalysis.ingredients.length > 8 && (
+                          <span className="text-[10px] text-zinc-400">+{result.productAnalysis.ingredients.length - 8} more</span>
+                        )}
+                      </div>
+                    </div>
+                    {result.productAnalysis.toxicIngredients.length > 0 && (
+                      <div>
+                        <label className="text-[10px] uppercase tracking-widest text-rose-400 font-bold">Toxic Flags</label>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {result.productAnalysis.toxicIngredients.map((toxic, i) => (
+                            <span key={i} className="px-3 py-1 bg-rose-50 text-rose-600 text-xs rounded-full font-medium">
+                              {toxic}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.section>
+
+                {/* Recommendation */}
+                <motion.section
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="glass p-8 rounded-3xl card-shadow lg:col-span-1"
+                >
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-zinc-100 rounded-lg">
+                      <Beaker className="w-5 h-5 text-zinc-600" />
+                    </div>
+                    <h3 className="font-bold text-lg">Expert Advice</h3>
+                  </div>
+                  <div className="prose prose-sm text-zinc-600">
+                    <p className="leading-relaxed">{result.comparison.recommendation}</p>
+                  </div>
+                  <div className="mt-8 pt-6 border-t border-zinc-100">
+                    <button
+                      onClick={reset}
+                      className="w-full py-4 bg-zinc-900 text-white rounded-2xl text-sm font-semibold hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 shadow-lg active:scale-95"
+                    >
+                      <RefreshCcw className="w-4 h-4" />
+                      New Analysis
+                    </button>
+                  </div>
+                </motion.section>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+    if (tab === 'shelf') {
+      return (
+        <>
+          {!shelfResult ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <ImageUpload
+                  id="shelf-skin-upload"
+                  label="Step 1: Your Skin"
+                  description="Upload a photo for skin type detection"
+                  image={shelfSkinImage}
+                  onImageSelect={(img) => {
+                    setShelfSkinImage(img);
+                    if (img && shelfImage) handleShelfScan(shelfImage, img);
+                  }}
+                  facingMode="user"
+                />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <ImageUpload
+                  id="shelf-upload"
+                  label="Step 2: The Shelf"
+                  description="Upload a photo of your skincare collection"
+                  image={shelfImage}
+                  onImageSelect={(img) => {
+                    setShelfImage(img);
+                    if (img && shelfSkinImage) handleShelfScan(img, shelfSkinImage);
+                  }}
+                  facingMode="environment"
+                />
+              </motion.div>
+
+              <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4 w-full">
+                <button
+                  onClick={() => handleShelfScan()}
+                  disabled={!shelfImage || !shelfSkinImage || isScanning}
+                  className={`w-full md:w-auto px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2
+                    ${!shelfImage || !shelfSkinImage || isScanning
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
+                    }`}
+                >
+                  {isScanning ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Analyzing Skincare...
+                    </>
+                  ) : (
+                    <>
+                      Skincare Analysis
+                    </>
+                  )}
+                </button>
+                {error && (
+                  <p className="text-rose-500 text-sm font-medium">{error}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-serif italic">Skincare Analysis Results</h2>
+                  <p className="text-zinc-500 text-sm">Detected Skin Type: <span className="text-zinc-900 font-semibold">{shelfResult.detectedSkinType}</span></p>
+                </div>
+                <button
+                  onClick={reset}
+                  className="p-4 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors shadow-sm active:scale-90"
+                >
+                  <RefreshCcw className="w-5 h-5 text-zinc-600" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {shelfResult.shelf_products.map((product, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="glass p-6 rounded-3xl card-shadow flex flex-col"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-2 rounded-xl ${getRatingColor(product.rating)}`}>
+                        {getRatingIcon(product.rating)}
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${getRatingColor(product.rating)}`}>
+                        {product.rating}
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-zinc-900 mb-1">{product.name}</h3>
+                    <p className="text-xs text-zinc-500 mb-4">{product.brand}</p>
+                    
+                    <p className="text-xs text-zinc-600 leading-relaxed mb-4 flex-1">
+                      {product.reasoning}
+                    </p>
+
+                    <div className="pt-4 border-t border-zinc-100">
+                      <div className="flex flex-wrap gap-1">
+                        {product.keyIngredients.map((ing, j) => (
+                          <span key={j} className="text-[9px] bg-zinc-50 text-zinc-400 px-2 py-0.5 rounded border border-zinc-100">
+                            {ing}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+    if (tab === 'beauty') {
+      return (
+        <>
+          {!beautyResult ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <ImageUpload
+                  id="beauty-skin-upload"
+                  label="Step 1: Your Face"
+                  description="Upload a photo for tone & undertone detection"
+                  image={beautySkinImage}
+                  onImageSelect={(img) => {
+                    setBeautySkinImage(img);
+                    if (img && beautyShelfImage) handleBeautyScan(beautyShelfImage, img);
+                  }}
+                  facingMode="user"
+                />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <ImageUpload
+                  id="beauty-shelf-upload"
+                  label="Step 2: The Shelf"
+                  description="Upload foundations, lipsticks, nail polish, etc."
+                  image={beautyShelfImage}
+                  onImageSelect={(img) => {
+                    setBeautyShelfImage(img);
+                    if (img && beautySkinImage) handleBeautyScan(img, beautySkinImage);
+                  }}
+                  facingMode="environment"
+                />
+              </motion.div>
+
+              <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4 w-full">
+                <button
+                  onClick={() => handleBeautyScan()}
+                  disabled={!beautyShelfImage || !beautySkinImage || isBeautyScanning}
+                  className={`w-full md:w-auto px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2
+                    ${!beautyShelfImage || !beautySkinImage || isBeautyScanning
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
+                    }`}
+                >
+                  {isBeautyScanning ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Matching Shades...
+                    </>
+                  ) : (
+                    <>
+                      Match Shades
+                    </>
+                  )}
+                </button>
+                {error && (
+                  <p className="text-rose-500 text-sm font-medium">{error}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div>
+                    <h2 className="text-2xl font-serif italic">Beauty Scan Results</h2>
+                    <div className="flex items-center gap-4 mt-1">
+                      <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full">
+                        <User className="w-3 h-3 text-zinc-500" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Tone: Monk {beautyResult.detectedSkinTone}</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full">
+                        <Palette className="w-3 h-3 text-zinc-500" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Undertone: {beautyResult.detectedUndertone}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={reset}
+                  className="p-4 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors shadow-sm active:scale-90"
+                >
+                  <RefreshCcw className="w-5 h-5 text-zinc-600" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {beautyResult.shelf_analysis.map((product, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="glass p-6 rounded-3xl card-shadow flex flex-col"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-2 rounded-xl ${getRatingColor(product.indicator_color)}`}>
+                        {getRatingIcon(product.indicator_color)}
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${getRatingColor(product.indicator_color)}`}>
+                        {product.product_type}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-bold text-zinc-900">{product.name}</h3>
+                      {product.hex_code && (
+                        <div 
+                          className="w-4 h-4 rounded-full border border-zinc-200 shadow-sm shrink-0" 
+                          style={{ backgroundColor: product.hex_code }}
+                          title={`Shade: ${product.hex_code}`}
+                        />
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-500 mb-4">{product.brand}</p>
+                    
+                    <div className={`p-4 rounded-2xl text-xs leading-relaxed flex-1 ${getRatingColor(product.indicator_color)}`}>
+                      <p className="font-semibold mb-1">Shade Advice:</p>
+                      {product.shade_advice}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+    if (tab === 'natural') {
+      return (
+        <>
+          {!naturalResult ? (
+            <div className="flex flex-col gap-6 md:gap-8 max-w-2xl mx-auto">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <ImageUpload
+                  id="natural-upload"
+                  label="Skin Concern Photo"
+                  description="Upload a photo of your skin concern (acne, dullness, etc.)"
+                  image={naturalImage}
+                  onImageSelect={(img) => {
+                    setNaturalImage(img);
+                    if (img) handleNaturalAnalyze(img);
+                  }}
+                  facingMode="user"
+                />
+              </motion.div>
+
+              <div className="flex flex-col items-center gap-4 mt-8 w-full">
+                <button
+                  onClick={() => handleNaturalAnalyze()}
+                  disabled={!naturalImage || isNaturalAnalyzing}
+                  className={`w-full md:w-auto px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center justify-center gap-2
+                    ${!naturalImage || isNaturalAnalyzing
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-xl active:scale-95'
+                    }`}
+                >
+                  {isNaturalAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Analyzing Concerns...
+                    </>
+                  ) : (
+                    <>
+                      <Leaf className="w-5 h-5" />
+                      Get Natural Remedy
+                    </>
+                  )}
+                </button>
+                {error && (
+                  <p className="text-rose-500 text-sm font-medium">{error}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto space-y-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-serif italic">Natural Remedy Analysis</h2>
+                <button
+                  onClick={reset}
+                  className="p-4 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors shadow-sm active:scale-90"
+                >
+                  <RefreshCcw className="w-5 h-5 text-zinc-600" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="md:col-span-1 space-y-6"
+                >
+                  <div className="glass p-6 rounded-3xl card-shadow border-emerald-100 bg-emerald-50/30">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-4 flex items-center gap-2">
+                      <Scan className="w-3 h-3" />
+                      Visual Diagnosis
+                    </h3>
+                    <p className="text-sm text-zinc-700 leading-relaxed italic">
+                      "{naturalResult.diagnosis}"
+                    </p>
+                  </div>
+
+                  <div className="glass p-6 rounded-3xl card-shadow">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      Details
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-zinc-500">Prep Time</span>
+                        <span className="text-xs font-bold text-zinc-900">{naturalResult.prep_time}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-zinc-500">Difficulty</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${naturalResult.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {naturalResult.difficulty}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="md:col-span-2 glass p-8 rounded-3xl card-shadow relative overflow-hidden"
+                >
+                  <div className="absolute top-0 right-0 p-8 opacity-5">
+                      <Leaf className="w-32 h-32 text-emerald-900" />
+                  </div>
+                  
+                  <h3 className="text-2xl font-serif italic text-zinc-900 mb-6">{naturalResult.remedy_name}</h3>
+                  
+                  <div className="space-y-6 relative z-10">
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Ingredients</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {naturalResult.ingredients.map((ing, i) => (
+                          <span key={i} className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full">
+                            {ing}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Preparation Steps</h4>
+                      <ol className="space-y-3">
+                        {naturalResult.steps.map((step, i) => (
+                          <li key={i} className="flex gap-3 text-sm text-zinc-600">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
+                              {i + 1}
+                            </span>
+                            {step}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <div className="pt-6 border-t border-zinc-100">
+                      <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                        <Zap className="w-4 h-4 text-amber-500 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1">Pro Tip</p>
+                          <p className="text-xs text-amber-800 leading-relaxed">{naturalResult.pro_tip}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+    if (tab === 'chat') {
+      return <ChatBot />;
+    }
+    return null;
+  };
 
   const handleAnalyze = async (sImg?: string, pImg?: string) => {
     const skin = sImg || skinImage;
@@ -58,7 +693,7 @@ export default function App() {
     setIsAnalyzing(true);
     setError(null);
     try {
-      const data = await analyzeDermatology(skin, product, selectedLanguage.name);
+      const data = await analyzeDermatology(skin, product);
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -76,7 +711,7 @@ export default function App() {
     setIsScanning(true);
     setError(null);
     try {
-      const data = await scanShelf(shelf, skin, selectedLanguage.name);
+      const data = await scanShelf(shelf, skin);
       setShelfResult(data);
     } catch (err) {
       console.error(err);
@@ -94,7 +729,7 @@ export default function App() {
     setIsBeautyScanning(true);
     setError(null);
     try {
-      const data = await analyzeBeauty(shelf, skin, selectedLanguage.name);
+      const data = await analyzeBeauty(shelf, skin);
       setBeautyResult(data);
     } catch (err) {
       console.error(err);
@@ -111,7 +746,7 @@ export default function App() {
     setIsNaturalAnalyzing(true);
     setError(null);
     try {
-      const data = await analyzeNaturalRemedy(skin, selectedLanguage.name);
+      const data = await analyzeNaturalRemedy(skin);
       setNaturalResult(data);
     } catch (err) {
       console.error(err);
@@ -155,7 +790,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-20 bg-[#F0F2F5] transition-colors duration-700 ease-in-out">
       {/* Header */}
       <header className="pt-12 pb-8 px-6 max-w-5xl mx-auto flex flex-col items-center text-center">
         <motion.div
@@ -168,46 +803,6 @@ export default function App() {
           </div>
           <span className="text-xl font-bold tracking-tight font-sans">Dermalyze</span>
         </motion.div>
-
-        {/* Language Selector */}
-        <div className="relative mb-8">
-          <button
-            onClick={() => setIsLangOpen(!isLangOpen)}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded-full text-sm font-medium transition-all"
-          >
-            <Globe className="w-4 h-4 text-zinc-500" />
-            <span>{selectedLanguage.flag} {selectedLanguage.name}</span>
-          </button>
-          
-          <AnimatePresence>
-            {isLangOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white border border-zinc-100 rounded-2xl shadow-xl p-2 z-50 grid grid-cols-2 gap-1 min-w-[240px]"
-              >
-                {LANGUAGES.map((lang) => (
-                  <button
-                    key={lang.code}
-                    onClick={() => {
-                      setSelectedLanguage(lang);
-                      setIsLangOpen(false);
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
-                      selectedLanguage.code === lang.code 
-                        ? 'bg-zinc-900 text-white' 
-                        : 'hover:bg-zinc-50 text-zinc-600'
-                    }`}
-                  >
-                    <span>{lang.flag}</span>
-                    <span>{lang.name}</span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
         <motion.h1
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -218,38 +813,38 @@ export default function App() {
         </motion.h1>
         
         {/* Tab Switcher */}
-        <div className="flex bg-zinc-100 p-1 rounded-full mt-6 mb-2">
+        <div className="flex flex-col md:flex-row bg-zinc-200/50 md:bg-white/50 md:backdrop-blur-sm p-2 rounded-3xl md:rounded-full mt-6 mb-2 gap-3 md:gap-1 md:border md:border-zinc-200/50 md:shadow-sm">
           <button
-            onClick={() => { setActiveTab('shelf'); reset(); }}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'shelf' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={() => handleTabClick('shelf')}
+            className={`px-4 py-4 md:px-6 md:py-2.5 rounded-2xl md:rounded-full text-sm font-medium transition-all flex items-center justify-center md:justify-start gap-2 ${activeTab === 'shelf' ? 'bg-zinc-900 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'}`}
           >
             <LayoutGrid className="w-4 h-4" />
             Skincare Analysis
           </button>
           <button
-            onClick={() => { setActiveTab('beauty'); reset(); }}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'beauty' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={() => handleTabClick('beauty')}
+            className={`px-4 py-4 md:px-6 md:py-2.5 rounded-2xl md:rounded-full text-sm font-medium transition-all flex items-center justify-center md:justify-start gap-2 ${activeTab === 'beauty' ? 'bg-zinc-900 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'}`}
           >
             <Palette className="w-4 h-4" />
             Beauty Scan
           </button>
           <button
-            onClick={() => { setActiveTab('single'); reset(); }}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'single' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={() => handleTabClick('single')}
+            className={`px-4 py-4 md:px-6 md:py-2.5 rounded-2xl md:rounded-full text-sm font-medium transition-all flex items-center justify-center md:justify-start gap-2 ${activeTab === 'single' ? 'bg-zinc-900 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'}`}
           >
             <Scan className="w-4 h-4" />
             Single Analysis
           </button>
           <button
-            onClick={() => { setActiveTab('natural'); reset(); }}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'natural' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={() => handleTabClick('natural')}
+            className={`px-4 py-4 md:px-6 md:py-2.5 rounded-2xl md:rounded-full text-sm font-medium transition-all flex items-center justify-center md:justify-start gap-2 ${activeTab === 'natural' ? 'bg-zinc-900 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'}`}
           >
             <Leaf className="w-4 h-4" />
             Natural Remedy
           </button>
           <button
-            onClick={() => { setActiveTab('chat'); reset(); }}
-            className={`px-6 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'chat' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={() => handleTabClick('chat')}
+            className={`px-4 py-4 md:px-6 md:py-2.5 rounded-2xl md:rounded-full text-sm font-medium transition-all flex items-center justify-center md:justify-start gap-2 ${activeTab === 'chat' ? 'bg-zinc-900 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50'}`}
           >
             <MessageSquare className="w-4 h-4" />
             Expert Chat
@@ -257,616 +852,68 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6">
-        {activeTab === 'single' ? (
-          <>
-            {!result ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <ImageUpload
-                    id="skin-upload"
-                    label="Step 1: Your Skin"
-                    description="Upload a clear photo of the skin area"
-                    image={skinImage}
-                    onImageSelect={(img) => {
-                      setSkinImage(img);
-                      if (img && productImage) handleAnalyze(img, productImage);
-                    }}
-                    facingMode="user"
-                  />
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <ImageUpload
-                    id="product-upload"
-                    label="Step 2: The Product"
-                    description="Upload the product bottle or shelf"
-                    image={productImage}
-                    onImageSelect={(img) => {
-                      setProductImage(img);
-                      if (img && skinImage) handleAnalyze(skinImage, img);
-                    }}
-                    facingMode="environment"
-                  />
-                </motion.div>
-
-                <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4">
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={!skinImage || !productImage || isAnalyzing}
-                    className={`px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center gap-2
-                      ${!skinImage || !productImage || isAnalyzing
-                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                        : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
-                      }`}
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>
-                        Analyze Safety
-                      </>
-                    )}
-                  </button>
-                  {error && (
-                    <p className="text-rose-500 text-sm font-medium">{error}</p>
-                  )}
-                </div>
+      <main className="max-w-5xl mx-auto px-4 md:px-6">
+        <div className="md:hidden">
+          {!isOverlayOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12 px-6 bg-white/50 rounded-3xl border border-zinc-200/50"
+            >
+              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-zinc-400">
+                <LayoutGrid className="w-8 h-8" />
               </div>
-            ) : (
-              <div className="space-y-8">
-                {/* Results Header */}
-                <div className={`p-6 rounded-3xl border flex flex-col md:flex-row items-center gap-6 ${getRatingColor(result.comparison.rating)}`}>
-                  <div className="p-4 bg-white rounded-2xl shadow-sm">
-                    {getRatingIcon(result.comparison.rating)}
-                  </div>
-                  <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-2xl font-bold mb-1">
-                      {result.comparison.rating === Rating.GREEN && "Highly Recommended"}
-                      {result.comparison.rating === Rating.YELLOW && "Safe but Ineffective"}
-                      {result.comparison.rating === Rating.RED && "Avoid this Product"}
-                    </h2>
-                    <p className="opacity-90 leading-relaxed">{result.comparison.reasoning}</p>
-                  </div>
-                  <button
-                    onClick={reset}
-                    className="p-3 bg-white/50 hover:bg-white/80 rounded-full transition-colors"
-                  >
-                    <RefreshCcw className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                  {/* Skin Analysis */}
-                  <motion.section
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="glass p-8 rounded-3xl card-shadow"
-                  >
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2 bg-zinc-100 rounded-lg">
-                        <Droplets className="w-5 h-5 text-zinc-600" />
-                      </div>
-                      <h3 className="font-bold text-lg">Skin Profile</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Body Part</label>
-                        <p className="text-zinc-900 font-medium">{result.skinAnalysis.bodyPart}</p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Condition</label>
-                        <p className="text-zinc-900 font-medium">{result.skinAnalysis.condition}</p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Skin Type</label>
-                        <p className="text-zinc-900 font-medium">{result.skinAnalysis.type}</p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Primary Needs</label>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {result.skinAnalysis.needs.map((need, i) => (
-                            <span key={i} className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full">
-                              {need}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.section>
-
-                  {/* Product Analysis */}
-                  <motion.section
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="glass p-8 rounded-3xl card-shadow"
-                  >
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2 bg-zinc-100 rounded-lg">
-                        <FlaskConical className="w-5 h-5 text-zinc-600" />
-                      </div>
-                      <h3 className="font-bold text-lg">Product Details</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Product Name</label>
-                        <p className="text-zinc-900 font-medium">{result.productAnalysis.name}</p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Brand</label>
-                        <p className="text-zinc-900 font-medium">{result.productAnalysis.brand}</p>
-                      </div>
-                      <div>
-                        <label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Ingredients</label>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {result.productAnalysis.ingredients.slice(0, 8).map((ing, i) => (
-                            <span key={i} className="px-2 py-1 bg-zinc-50 border border-zinc-100 text-zinc-500 text-[10px] rounded-md">
-                              {ing}
-                            </span>
-                          ))}
-                          {result.productAnalysis.ingredients.length > 8 && (
-                            <span className="text-[10px] text-zinc-400">+{result.productAnalysis.ingredients.length - 8} more</span>
-                          )}
-                        </div>
-                      </div>
-                      {result.productAnalysis.toxicIngredients.length > 0 && (
-                        <div>
-                          <label className="text-[10px] uppercase tracking-widest text-rose-400 font-bold">Toxic Flags</label>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {result.productAnalysis.toxicIngredients.map((toxic, i) => (
-                              <span key={i} className="px-3 py-1 bg-rose-50 text-rose-600 text-xs rounded-full font-medium">
-                                {toxic}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </motion.section>
-
-                  {/* Recommendation */}
-                  <motion.section
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="glass p-8 rounded-3xl card-shadow lg:col-span-1"
-                  >
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="p-2 bg-zinc-100 rounded-lg">
-                        <Beaker className="w-5 h-5 text-zinc-600" />
-                      </div>
-                      <h3 className="font-bold text-lg">Expert Advice</h3>
-                    </div>
-                    <div className="prose prose-sm text-zinc-600">
-                      <p className="leading-relaxed">{result.comparison.recommendation}</p>
-                    </div>
-                    <div className="mt-8 pt-6 border-t border-zinc-100">
-                      <button
-                        onClick={reset}
-                        className="w-full py-3 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <RefreshCcw className="w-4 h-4" />
-                        New Analysis
-                      </button>
-                    </div>
-                  </motion.section>
-                </div>
+              <h3 className="text-xl font-bold text-zinc-900 mb-2">Ready to analyze?</h3>
+              <p className="text-zinc-500 text-sm mb-8">Select an option above to start your skin health journey.</p>
+              <div className="flex flex-col gap-3">
+                <div className="h-1 w-12 bg-zinc-200 mx-auto rounded-full" />
+                <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Tap a mode to begin</p>
               </div>
-            )}
-          </>
-        ) : activeTab === 'shelf' ? (
-          <>
-            {!shelfResult ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <ImageUpload
-                    id="shelf-skin-upload"
-                    label="Step 1: Your Skin"
-                    description="Upload a photo for skin type detection"
-                    image={shelfSkinImage}
-                    onImageSelect={(img) => {
-                      setShelfSkinImage(img);
-                      if (img && shelfImage) handleShelfScan(shelfImage, img);
-                    }}
-                    facingMode="user"
-                  />
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <ImageUpload
-                    id="shelf-upload"
-                    label="Step 2: The Shelf"
-                    description="Upload a photo of your skincare collection"
-                    image={shelfImage}
-                    onImageSelect={(img) => {
-                      setShelfImage(img);
-                      if (img && shelfSkinImage) handleShelfScan(img, shelfSkinImage);
-                    }}
-                    facingMode="environment"
-                  />
-                </motion.div>
-
-                <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4">
-                  <button
-                    onClick={handleShelfScan}
-                    disabled={!shelfImage || !shelfSkinImage || isScanning}
-                    className={`px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center gap-2
-                      ${!shelfImage || !shelfSkinImage || isScanning
-                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                        : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
-                      }`}
-                  >
-                    {isScanning ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Analyzing Skincare...
-                      </>
-                    ) : (
-                      <>
-                        Skincare Analysis
-                      </>
-                    )}
-                  </button>
-                  {error && (
-                    <p className="text-rose-500 text-sm font-medium">{error}</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-2xl font-serif italic">Skincare Analysis Results</h2>
-                    <p className="text-zinc-500 text-sm">Detected Skin Type: <span className="text-zinc-900 font-semibold">{shelfResult.detectedSkinType}</span></p>
-                  </div>
-                  <button
-                    onClick={reset}
-                    className="p-3 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors"
-                  >
-                    <RefreshCcw className="w-5 h-5 text-zinc-600" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {shelfResult.shelf_products.map((product, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="glass p-6 rounded-3xl card-shadow flex flex-col"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={`p-2 rounded-xl ${getRatingColor(product.rating)}`}>
-                          {getRatingIcon(product.rating)}
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${getRatingColor(product.rating)}`}>
-                          {product.rating}
-                        </span>
-                      </div>
-                      <h3 className="font-bold text-zinc-900 mb-1">{product.name}</h3>
-                      <p className="text-xs text-zinc-500 mb-4">{product.brand}</p>
-                      
-                      <p className="text-xs text-zinc-600 leading-relaxed mb-4 flex-1">
-                        {product.reasoning}
-                      </p>
-
-                      <div className="pt-4 border-t border-zinc-100">
-                        <div className="flex flex-wrap gap-1">
-                          {product.keyIngredients.map((ing, j) => (
-                            <span key={j} className="text-[9px] bg-zinc-50 text-zinc-400 px-2 py-0.5 rounded border border-zinc-100">
-                              {ing}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        ) : activeTab === 'beauty' ? (
-          <>
-            {!beautyResult ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <ImageUpload
-                    id="beauty-skin-upload"
-                    label="Step 1: Your Face"
-                    description="Upload a photo for tone & undertone detection"
-                    image={beautySkinImage}
-                    onImageSelect={(img) => {
-                      setBeautySkinImage(img);
-                      if (img && beautyShelfImage) handleBeautyScan(beautyShelfImage, img);
-                    }}
-                    facingMode="user"
-                  />
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <ImageUpload
-                    id="beauty-shelf-upload"
-                    label="Step 2: The Shelf"
-                    description="Upload foundations, lipsticks, nail polish, etc."
-                    image={beautyShelfImage}
-                    onImageSelect={(img) => {
-                      setBeautyShelfImage(img);
-                      if (img && beautySkinImage) handleBeautyScan(img, beautySkinImage);
-                    }}
-                    facingMode="environment"
-                  />
-                </motion.div>
-
-                <div className="md:col-span-2 flex flex-col items-center gap-4 mt-4">
-                  <button
-                    onClick={handleBeautyScan}
-                    disabled={!beautyShelfImage || !beautySkinImage || isBeautyScanning}
-                    className={`px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center gap-2
-                      ${!beautyShelfImage || !beautySkinImage || isBeautyScanning
-                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                        : 'bg-zinc-900 text-white hover:bg-zinc-800 shadow-lg hover:shadow-xl active:scale-95'
-                      }`}
-                  >
-                    {isBeautyScanning ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Matching Shades...
-                      </>
-                    ) : (
-                      <>
-                        Match Shades
-                      </>
-                    )}
-                  </button>
-                  {error && (
-                    <p className="text-rose-500 text-sm font-medium">{error}</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-6">
-                    <div>
-                      <h2 className="text-2xl font-serif italic">Beauty Scan Results</h2>
-                      <div className="flex items-center gap-4 mt-1">
-                        <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full">
-                          <User className="w-3 h-3 text-zinc-500" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Tone: Monk {beautyResult.detectedSkinTone}</span>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-zinc-100 rounded-full">
-                          <Palette className="w-3 h-3 text-zinc-500" />
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">Undertone: {beautyResult.detectedUndertone}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={reset}
-                    className="p-3 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors"
-                  >
-                    <RefreshCcw className="w-5 h-5 text-zinc-600" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {beautyResult.shelf_analysis.map((product, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="glass p-6 rounded-3xl card-shadow flex flex-col"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={`p-2 rounded-xl ${getRatingColor(product.indicator_color)}`}>
-                          {getRatingIcon(product.indicator_color)}
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${getRatingColor(product.indicator_color)}`}>
-                          {product.product_type}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-bold text-zinc-900">{product.name}</h3>
-                        {product.hex_code && (
-                          <div 
-                            className="w-4 h-4 rounded-full border border-zinc-200 shadow-sm shrink-0" 
-                            style={{ backgroundColor: product.hex_code }}
-                            title={`Shade: ${product.hex_code}`}
-                          />
-                        )}
-                      </div>
-                      <p className="text-xs text-zinc-500 mb-4">{product.brand}</p>
-                      
-                      <div className={`p-4 rounded-2xl text-xs leading-relaxed flex-1 ${getRatingColor(product.indicator_color)}`}>
-                        <p className="font-semibold mb-1">Shade Advice:</p>
-                        {product.shade_advice}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        ) : activeTab === 'natural' ? (
-          <>
-            {!naturalResult ? (
-              <div className="max-w-2xl mx-auto">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <ImageUpload
-                    id="natural-upload"
-                    label="Skin Concern Photo"
-                    description="Upload a photo of your skin concern (acne, dullness, etc.)"
-                    image={naturalImage}
-                    onImageSelect={(img) => {
-                      setNaturalImage(img);
-                      if (img) handleNaturalAnalyze(img);
-                    }}
-                    facingMode="user"
-                  />
-                </motion.div>
-
-                <div className="flex flex-col items-center gap-4 mt-8">
-                  <button
-                    onClick={() => handleNaturalAnalyze()}
-                    disabled={!naturalImage || isNaturalAnalyzing}
-                    className={`px-12 py-4 rounded-full font-semibold transition-all duration-300 flex items-center gap-2
-                      ${!naturalImage || isNaturalAnalyzing
-                        ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-xl active:scale-95'
-                      }`}
-                  >
-                    {isNaturalAnalyzing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        Analyzing Concerns...
-                      </>
-                    ) : (
-                      <>
-                        <Leaf className="w-5 h-5" />
-                        Get Natural Remedy
-                      </>
-                    )}
-                  </button>
-                  {error && (
-                    <p className="text-rose-500 text-sm font-medium">{error}</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="max-w-3xl mx-auto space-y-8">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-serif italic">Natural Remedy Analysis</h2>
-                  <button
-                    onClick={reset}
-                    className="p-3 bg-zinc-100 hover:bg-zinc-200 rounded-full transition-colors"
-                  >
-                    <RefreshCcw className="w-5 h-5 text-zinc-600" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="md:col-span-1 space-y-6"
-                  >
-                    <div className="glass p-6 rounded-3xl card-shadow border-emerald-100 bg-emerald-50/30">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-4 flex items-center gap-2">
-                        <Scan className="w-3 h-3" />
-                        Visual Diagnosis
-                      </h3>
-                      <p className="text-sm text-zinc-700 leading-relaxed italic">
-                        "{naturalResult.diagnosis}"
-                      </p>
-                    </div>
-
-                    <div className="glass p-6 rounded-3xl card-shadow">
-                      <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2">
-                        <Clock className="w-3 h-3" />
-                        Details
-                      </h3>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-zinc-500">Prep Time</span>
-                          <span className="text-xs font-bold text-zinc-900">{naturalResult.prep_time}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-zinc-500">Difficulty</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${naturalResult.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {naturalResult.difficulty}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="md:col-span-2 glass p-8 rounded-3xl card-shadow relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 p-8 opacity-5">
-                        <Leaf className="w-32 h-32 text-emerald-900" />
-                    </div>
-                    
-                    <h3 className="text-2xl font-serif italic text-zinc-900 mb-6">{naturalResult.remedy_name}</h3>
-                    
-                    <div className="space-y-6 relative z-10">
-                      <div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Ingredients</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {naturalResult.ingredients.map((ing, i) => (
-                            <span key={i} className="px-3 py-1 bg-zinc-100 text-zinc-600 text-xs rounded-full">
-                              {ing}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Preparation Steps</h4>
-                        <ol className="space-y-3">
-                          {naturalResult.steps.map((step, i) => (
-                            <li key={i} className="flex gap-3 text-sm text-zinc-600">
-                              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
-                                {i + 1}
-                              </span>
-                              {step}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-
-                      <div className="pt-6 border-t border-zinc-100">
-                        <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                          <Zap className="w-4 h-4 text-amber-500 mt-0.5" />
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1">Pro Tip</p>
-                            <p className="text-xs text-amber-800 leading-relaxed">{naturalResult.pro_tip}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <ChatBot language={selectedLanguage.name} />
-        )}
+            </motion.div>
+          )}
+        </div>
+        <div className="hidden md:block">
+          {renderTabContent(activeTab)}
+        </div>
       </main>
+
+      <AnimatePresence>
+        {isOverlayOpen && overlayTab && (
+          <motion.div
+            initial={{ opacity: 0, y: '100%' }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className={`fixed inset-0 z-[9999] flex flex-col ${
+              overlayTab === 'beauty' ? 'bg-[#FCE4EC]' : 
+              overlayTab === 'natural' ? 'bg-[#E8F5E9]' : 
+              overlayTab === 'chat' ? 'bg-[#E3F2FD]' : 
+              (overlayTab === 'single' || overlayTab === 'shelf') ? 'bg-[#F8F9FA]' : 'bg-white'
+            }`}
+          >
+            <div className="flex items-center justify-between p-6 bg-inherit sticky top-0 z-10">
+              <h2 className="text-xl font-bold capitalize">
+                {overlayTab === 'chat' ? 'Expert Chat' : 
+                 overlayTab === 'beauty' ? 'Beauty Scan' : 
+                 overlayTab === 'natural' ? 'Natural Remedy' : 
+                 overlayTab === 'shelf' ? 'Skincare Analysis' :
+                 overlayTab === 'single' ? 'Single Analysis' : overlayTab}
+              </h2>
+              <button 
+                onClick={() => setIsOverlayOpen(false)}
+                className="p-3 bg-white/80 rounded-full shadow-md hover:bg-white transition-colors border border-zinc-200"
+              >
+                <X className="w-6 h-6 text-zinc-900" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-20">
+              <div className="max-w-2xl mx-auto pt-4">
+                {renderTabContent(overlayTab)}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer Disclaimer */}
       <footer className="mt-20 px-6 text-center">

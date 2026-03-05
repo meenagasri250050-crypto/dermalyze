@@ -89,20 +89,20 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ label, description, im
                 <p className="text-sm font-medium text-zinc-900">{description}</p>
                 <p className="text-xs text-zinc-500 mt-1">Drag and drop or use camera</p>
               </div>
-              <div className="flex gap-2 mt-2">
+              <div className="grid grid-cols-2 gap-4 mt-4 w-full max-w-[320px]">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 bg-zinc-100 text-zinc-900 text-xs font-bold rounded-full hover:bg-zinc-200 transition-colors flex items-center gap-2"
+                  className="px-6 py-4 bg-zinc-100 text-zinc-900 text-xs font-bold rounded-2xl hover:bg-zinc-200 transition-colors flex flex-col items-center justify-center gap-3 shadow-sm active:scale-95"
                 >
-                  <Upload className="w-3 h-3" />
+                  <Upload className="w-5 h-5" />
                   Upload
                 </button>
                 <button
                   onClick={() => setIsCameraOpen(true)}
-                  className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-full hover:bg-zinc-800 transition-colors flex items-center gap-2"
+                  className="px-6 py-4 bg-zinc-900 text-white text-xs font-bold rounded-2xl hover:bg-zinc-800 transition-colors flex flex-col items-center justify-center gap-3 shadow-md active:scale-95"
                 >
-                  <Camera className="w-3 h-3" />
-                  Open Camera
+                  <Camera className="w-5 h-5" />
+                  Camera
                 </button>
               </div>
             </motion.div>
