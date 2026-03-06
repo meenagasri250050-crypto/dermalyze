@@ -9,7 +9,7 @@ import { AnalysisResult, Rating, ShelfScanResult, BeautyAnalysisResult, NaturalR
 type Tab = 'single' | 'shelf' | 'beauty' | 'natural' | 'chat';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('shelf');
+  const [activeTab, setActiveTab] = useState<Tab | null>(null);
   
   // Single Analysis State
   const [skinImage, setSkinImage] = useState<string | null>(null);
@@ -61,7 +61,24 @@ export default function App() {
     }
   };
 
-  const renderTabContent = (tab: Tab) => {
+  const renderTabContent = (tab: Tab | null) => {
+    if (!tab) {
+      return (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center py-20 text-center"
+        >
+          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-zinc-400 mb-6 shadow-sm border border-zinc-100">
+            <Sparkles className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-serif italic mb-2">Welcome to Dermalyze</h2>
+          <p className="text-zinc-500 max-w-md mx-auto leading-relaxed">
+            Select one of the tools above to begin your skincare analysis and get expert advice.
+          </p>
+        </motion.div>
+      );
+    }
     if (tab === 'single') {
       return (
         <>
@@ -853,28 +870,7 @@ export default function App() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 md:px-6">
-        <div className="md:hidden">
-          {!isOverlayOpen && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12 px-6 bg-white/50 rounded-3xl border border-zinc-200/50"
-            >
-              <div className="w-16 h-16 bg-zinc-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-zinc-400">
-                <LayoutGrid className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-bold text-zinc-900 mb-2">Ready to analyze?</h3>
-              <p className="text-zinc-500 text-sm mb-8">Select an option above to start your skin health journey.</p>
-              <div className="flex flex-col gap-3">
-                <div className="h-1 w-12 bg-zinc-200 mx-auto rounded-full" />
-                <p className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">Tap a mode to begin</p>
-              </div>
-            </motion.div>
-          )}
-        </div>
-        <div className="hidden md:block">
-          {renderTabContent(activeTab)}
-        </div>
+        {renderTabContent(activeTab)}
       </main>
 
       <AnimatePresence>
@@ -884,14 +880,14 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed inset-0 z-[9999] flex flex-col ${
+            className={`fixed inset-0 z-50 flex flex-col ${
               overlayTab === 'beauty' ? 'bg-[#FCE4EC]' : 
               overlayTab === 'natural' ? 'bg-[#E8F5E9]' : 
               overlayTab === 'chat' ? 'bg-[#E3F2FD]' : 
               (overlayTab === 'single' || overlayTab === 'shelf') ? 'bg-[#F8F9FA]' : 'bg-white'
             }`}
           >
-            <div className="flex items-center justify-between p-6 bg-inherit sticky top-0 z-10">
+            <div className="flex items-center justify-between p-6">
               <h2 className="text-xl font-bold capitalize">
                 {overlayTab === 'chat' ? 'Expert Chat' : 
                  overlayTab === 'beauty' ? 'Beauty Scan' : 
@@ -901,15 +897,13 @@ export default function App() {
               </h2>
               <button 
                 onClick={() => setIsOverlayOpen(false)}
-                className="p-3 bg-white/80 rounded-full shadow-md hover:bg-white transition-colors border border-zinc-200"
+                className="p-2 bg-white/50 rounded-full shadow-sm hover:bg-white/80 transition-colors"
               >
                 <X className="w-6 h-6 text-zinc-900" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-20">
-              <div className="max-w-2xl mx-auto pt-4">
-                {renderTabContent(overlayTab)}
-              </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-10">
+              {renderTabContent(overlayTab)}
             </div>
           </motion.div>
         )}

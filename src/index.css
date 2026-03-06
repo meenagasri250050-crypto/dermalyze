@@ -9,21 +9,30 @@
 
 @layer base {
   body {
-    @apply text-zinc-900 antialiased transition-colors duration-700 ease-in-out;
+    @apply text-zinc-900 antialiased transition-colors duration-700 ease-in-out leading-relaxed;
     font-size: 14px;
   }
   
   @screen md {
     body {
       font-size: 16px;
+      line-height: 1.6;
     }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
   }
 }
 
 .glass {
-  @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-sm;
+  @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-lg rounded-[20px];
 }
 
 .card-shadow {
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+.glass-dark {
+  @apply bg-zinc-900/80 backdrop-blur-xl border border-white/10 shadow-xl rounded-[20px];
 }

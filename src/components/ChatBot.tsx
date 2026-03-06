@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, User, Bot, Loader2, RefreshCcw, MessageSquare } from 'lucide-react';
+import { Send, User, Bot, Loader2, RefreshCcw, MessageSquare, Maximize2, Minimize2 } from 'lucide-react';
 import { createChatSession } from '../services/geminiService';
 
 interface Message {
@@ -18,6 +18,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ language }) => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const chatRef = useRef<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -63,8 +64,16 @@ export const ChatBot: React.FC<ChatBotProps> = ({ language }) => {
     ]);
   };
 
+  const toggleFullScreen = () => {
+    setIsFullScreen(!isFullScreen);
+  };
+
   return (
-    <div className="max-w-3xl mx-auto h-[600px] flex flex-col glass rounded-3xl card-shadow overflow-hidden">
+    <div className={`flex flex-col glass transition-all duration-300 overflow-hidden ${
+      isFullScreen 
+        ? 'fixed inset-0 z-[60] rounded-none h-screen w-screen bg-white' 
+        : 'max-w-3xl mx-auto h-[600px] rounded-3xl card-shadow'
+    }`}>
       {/* Header */}
       <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
         <div className="flex items-center gap-3">
@@ -76,13 +85,22 @@ export const ChatBot: React.FC<ChatBotProps> = ({ language }) => {
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Always here to help</p>
           </div>
         </div>
-        <button
-          onClick={resetChat}
-          className="p-2 hover:bg-zinc-200 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
-          title="Reset Chat"
-        >
-          <RefreshCcw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleFullScreen}
+            className="p-2 hover:bg-zinc-200 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+          >
+            {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={resetChat}
+            className="p-2 hover:bg-zinc-200 rounded-full transition-colors text-zinc-400 hover:text-zinc-600"
+            title="Reset Chat"
+          >
+            <RefreshCcw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}

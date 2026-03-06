@@ -14,21 +14,23 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(true);
+  const [currentFacingMode, setCurrentFacingMode] = useState<'user' | 'environment'>(facingMode);
 
   useEffect(() => {
     startCamera();
     return () => {
       stopCamera();
     };
-  }, [facingMode]);
+  }, [currentFacingMode]);
 
   const startCamera = async () => {
     setIsStarting(true);
     setError(null);
+    stopCamera(); // Ensure previous stream is stopped
     try {
       const constraints = {
         video: {
-          facingMode: facingMode,
+          facingMode: currentFacingMode,
           width: { ideal: 1280 },
           height: { ideal: 720 }
         }
@@ -51,6 +53,10 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+  };
+
+  const toggleCamera = () => {
+    setCurrentFacingMode(prev => prev === 'user' ? 'environment' : 'user');
   };
 
   const captureImage = () => {
@@ -110,7 +116,14 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
         <canvas ref={canvasRef} className="hidden" />
 
         {/* Controls */}
-        <div className="absolute top-6 right-6">
+        <div className="absolute top-6 right-6 flex gap-4">
+          <button
+            onClick={toggleCamera}
+            className="p-3 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white rounded-full transition-all"
+            title="Switch Camera"
+          >
+            <RefreshCcw className="w-6 h-6" />
+          </button>
           <button
             onClick={onClose}
             className="p-3 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white rounded-full transition-all"
@@ -133,7 +146,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onClose
             <div className="px-4 py-1.5 bg-black/40 backdrop-blur-md rounded-full flex items-center gap-2">
                 <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
                 <span className="text-[10px] font-bold text-white uppercase tracking-widest">
-                    {facingMode === 'user' ? 'Front Camera Active' : 'Back Camera Active'}
+                    {currentFacingMode === 'user' ? 'Front Camera Active' : 'Back Camera Active'}
                 </span>
             </div>
         </div>
